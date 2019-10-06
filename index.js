@@ -36,8 +36,8 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 	router.get('/', (req, res, next) => { // eslint-disable-line complexity
 		const mode = req.query.mode || "";
 		const path = req.query.path;
-		const respond = (obj) => nextWith(req, next, obj);
-//		const respond = (obj) => respondWith(res, obj);
+		// const respond = (obj) => nextWith(req, next, obj);
+		const respond = (obj) => respondWith(res, obj);
 
 		switch (mode.trim()) {
 			case 'initiate':
