@@ -271,7 +271,7 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 				created: pp.stats.birthtime,
 				modified: pp.stats.mtime,
 				name: pp.filename,
-				path: pp.uiPath,
+				// path: pp.uiPath,
 				readable: 1,
 				writable: 1,
 				timestamp: '',
