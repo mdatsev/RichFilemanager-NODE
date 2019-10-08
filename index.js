@@ -16,6 +16,7 @@ const mv = require('mv');
 const paths = require('path');
 const multer = require('multer');
 paths.posix = require('path-posix');
+const sharp = require('sharp');
 
 const router = express.Router(); // eslint-disable-line
 const upload = multer({dest: 'public/'});
@@ -74,7 +75,15 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 			break;
 			case 'getimage':
 				parsePath(path, (pp) => {
-					res.sendFile(paths.resolve(pp.osFullPath));
+					const path = paths.resolve(pp.osFullPath);
+					const needThumbnail = req.query.thumbnail;
+					if(needThumbnail) {
+						getThumbnail(path, (thumbPath) => {
+							res.sendFile(thumbPath)
+						})
+					} else {
+						return res.sendFile(path);
+					}
 				}); // parsePath
 			break;
 			case 'readfile':
@@ -524,5 +533,38 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 		next();
 	} // respond
 
+	async function getThumbnail(path, cb) {
+		try {
+			if (path.includes('.thumbnails')) {
+				return cb(path)
+			}
+			const thumbnailsDir = paths.join(paths.dirname(path), '.thumbnails')
+			const thumbnailPath = paths.join(thumbnailsDir, paths.basename(path))
+			try {
+				const stats = await fs.promises.stat(thumbnailsDir)
+				if (!stats.isDirectory()) {
+					throw Error('.thumbnails is not a directory')	
+				}
+			} catch(e) {
+				if(e.code == 'ENOENT') {
+					await fs.promises.mkdir(thumbnailsDir)
+				} else {
+					throw e
+				}
+			}
+			try {
+				await fs.promises.access(thumbnailPath, fs.constants.R_OK)
+				return cb(thumbnailPath)
+			} catch(e) {
+				const factor = 1.5
+				await sharp(path).resize(194 * factor, 120 * factor, { fit: "inside" }).toFile(thumbnailPath)
+				return cb(thumbnailPath)
+			}
+		} catch (e) {
+			console.error(e, e.stack)
+			return cb(path)
+		}
+	}
+	
 	return router;
 }; // module.exports
