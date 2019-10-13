@@ -16,7 +16,7 @@ const mv = require('mv');
 const paths = require('path');
 const multer = require('multer');
 paths.posix = require('path-posix');
-const sharp = require('sharp');
+const { getThumbnail, filterFiles } = require('./exposed.js')
 
 const router = express.Router(); // eslint-disable-line
 const upload = multer({dest: 'public/'});
@@ -29,9 +29,10 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 	else if( typeof( configPath ) === "object"  ){
 		config = configPath;
 	}
-
+	const __trashDir = paths.join(__appRoot, '.trash')
 	// Create __appRoot if it doesn't exist
 	fs.mkdirp(__appRoot);
+	fs.mkdirp(__trashDir);
 
 	// finally, our main route handling that calls the above functions :)
 	router.get('/', (req, res, next) => { // eslint-disable-line complexity
@@ -79,7 +80,10 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 					const needThumbnail = req.query.thumbnail;
 					if(needThumbnail) {
 						getThumbnail(path, (thumbPath) => {
-							res.sendFile(thumbPath)
+							if(thumbPath != null)
+								return res.sendFile(thumbPath)
+							else
+								return res.send( )
 						})
 					} else {
 						return res.sendFile(path);
@@ -344,6 +348,7 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 				console.log('err -> ', err); // eslint-disable-line no-console
 				callback(errors(err));
 			} else {
+				files = filterFiles(files)
 				const loopInfo = {
 					results: [],
 					total: files.length,
@@ -362,23 +367,34 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 
 	// function to delete a file/folder
 	function deleteItem(pp, callback) {
-		if (pp.isDirectory === true) {
-			fs.rmdir(pp.osFullPath, (err) => {
-				if (err) {
-					callback(errors(err));
-				} else {
+		fs.mkdtemp(`${__trashDir}/`, (err, dir) => {
+			if (err) return callback(errors(err));
+			fs.move(pp.osFullPath, paths.join(dir, paths.basename(pp.osFullPath)), (err) => {
+				if (err) return callback(errors(err));
+				if (pp.isDirectory === true) {
 					directoryInfo(pp, callback);
-				} // if
-			}); // fs.rmdir
-		} else {
-			fs.unlink(pp.osFullPath, (err) => {
-				if (err) {
-					callback(errors(err));
 				} else {
 					fileInfo(pp, callback);
-				} // if
-			}); // fs.unlink
-		} // if
+				}
+			})
+		});
+		// if (pp.isDirectory === true) {
+		// 	fs.rmdir(pp.osFullPath, (err) => {
+		// 		if (err) {
+		// 			callback(errors(err));
+		// 		} else {
+		// 			directoryInfo(pp, callback);
+		// 		} // if
+		// 	}); // fs.rmdir
+		// } else {
+		// 	fs.unlink(pp.osFullPath, (err) => {
+		// 		if (err) {
+		// 			callback(errors(err));
+		// 		} else {
+		// 			fileInfo(pp, callback);
+		// 		} // if
+		// 	}); // fs.unlink
+		// } // if
 	} // deleteItem
 
 	// function to add a new folder
@@ -532,39 +548,6 @@ module.exports = (__appRoot, configPath) => { // eslint-disable-line max-stateme
 		req.rfmNodeData = obj;
 		next();
 	} // respond
-
-	async function getThumbnail(path, cb) {
-		try {
-			if (path.includes('.thumbnails')) {
-				return cb(path)
-			}
-			const thumbnailsDir = paths.join(paths.dirname(path), '.thumbnails')
-			const thumbnailPath = paths.join(thumbnailsDir, paths.basename(path))
-			try {
-				const stats = await fs.promises.stat(thumbnailsDir)
-				if (!stats.isDirectory()) {
-					throw Error('.thumbnails is not a directory')	
-				}
-			} catch(e) {
-				if(e.code == 'ENOENT') {
-					await fs.promises.mkdir(thumbnailsDir)
-				} else {
-					throw e
-				}
-			}
-			try {
-				await fs.promises.access(thumbnailPath, fs.constants.R_OK)
-				return cb(thumbnailPath)
-			} catch(e) {
-				const factor = 1.5
-				await sharp(path).resize(194 * factor, 120 * factor, { fit: "inside" }).toFile(thumbnailPath)
-				return cb(thumbnailPath)
-			}
-		} catch (e) {
-			console.error(e, e.stack)
-			return cb(path)
-		}
-	}
 	
 	return router;
 }; // module.exports
